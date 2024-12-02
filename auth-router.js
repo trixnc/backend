@@ -1,52 +1,66 @@
 import express from "express";
-import * as fs from "fs";
-import { nanoid } from "nanoid";
+import bcrypt from "bcrypt";
+import UserModel from "./models/user-model.js";
 
 const router = express.Router();
 
-let todos = [];
-const data = fs.readFileSync("./data.json", "utf-8");
-todos = JSON.parse(data);
+const checkIsPhoneNumber = (credential) => {
+    console.log("1");
+    if (credential.length !== 8) return false;
+    console.log("2");
+    if (isNaN(Number(credential))) return false;
+    console.log("3");
+    const firstCharacter = credential[0];
+    if (!["9", "8", "7", "6"].includes(firstCharacter)) return false;
+    console.log("4");
+    return true;
+};
 
-router.get("/", (req, res) => {
-    res.send(todos);
+const checkIsEmail = (credential) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(credential);
+};
+
+router.post("/signup", async (req, res) => {
+    const { credential, password, fullname, username } = req.body;
+    if (!credential || credential === "") {
+        return res.status(400).send({ message: "Email or Phone required!" });
+    }
+    if (!password || password === "") {
+        return res.status(400).send({ message: "Password required!" });
+    }
+    if (!fullname || fullname === "") {
+        return res.status(400).send({ message: "Fullname required!" });
+    }
+    if (!username || username === "") {
+        return res.status(400).send({ message: "Fullname required!" });
+    }
+    // BUH TALBAR UTGATAI BAIGAA
+
+    const isPhoneNumber = checkIsPhoneNumber(credential);
+    const isEmail = checkIsEmail(credential);
+
+    const existingUser = await UserModel.findOne({ email });
+    if (existingUser) return res.status(400).send({ message: "Email already registered!" });
+
+    bcrypt.hash(password, 10, async function (err, hash) {
+        const newUser = { email, password: hash };
+        await UserModel.create(newUser);
+        return res.status(201).send(newUser);
+    });
 });
 
-router.post("/", (req, res) => {
-    const title = req.body.title;
-    if (!title) return res.status(400).send({ message: "title is not found" });
-    const newTodo = {
-        id: nanoid(),
-        title: title,
-        checked: false,
-    };
-    todos.push(newTodo);
-    fs.writeFileSync("./data.json", JSON.stringify(todos), "utf-8");
-    return res.send(newTodo);
-});
-
-router.get("/:id", (req, res) => {
-    const id = req.params.id;
-    if (!id) return res.status(400).send({ message: "Id not found!" });
-    const todo = todos.find((item) => item.id === Number(id));
-    if (!todo) return res.status(404).send({ message: "Todo not found!" });
-    return res.send(todo);
-});
-
-router.delete("/:id", (req, res) => {
-    const id = req.params.id;
-    if (!id) return res.status(400).send({ message: "Id not found!" });
-    const index = todos.findIndex((todo) => todo.id === Number(id));
-    if (index === -1) return res.status(404).send({ message: "Todo not found!" });
-    todos.splice(index, 1);
-    fs.writeFileSync("./data.json", JSON.stringify(todos), "utf-8");
-    return res.send({ id });
-});
-
-router.put("/:id", (req, res) => {
-    const id = req.params.id;
-    if (!id) return res.status(400).send({ message: "Id not found!" });
-    // TODO update functions
+router.post("/signin", async (req, res) => {
+    const { email, password } = req.body;
+    const existingUser = await UserModel.findOne({ email });
+    if (!existingUser) return res.status(400).send({ message: "Email or password not correct!" });
+    bcrypt.compare(password, existingUser.password, function (err, result) {
+        if (!result) {
+            return res.status(400).send({ message: "Email or password not correct!" });
+        } else {
+            return res.status(200).send({ message: "Welcome" });
+        }
+    });
 });
 
 export default router;
